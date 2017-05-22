@@ -238,4 +238,16 @@
       (length (collect-cached-fixture-output random-fixture random-fixture))
       :test #'equalp))
 
+(subtest "Testing errors"
+  (define-simple-fixture existing-fixture (non-existing-fixture) nil
+    non-existing-fixture)
+  (is-error (with-fixtures ((val non-existing-fixture))
+              (declare (ignore val)))
+            'undefined-fixture)
+  (is-error (with-fixtures ((val existing-fixture))
+              (declare (ignore val)))
+            'undefined-fixture)
+  (is-error (with-fixtures ((totally wrong format)))
+            'error))
+
 (finalize)
