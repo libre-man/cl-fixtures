@@ -379,6 +379,12 @@ from [Quicklisp](http://www.quicklisp.org/beta/).
 #+BEGIN_SRC lisp
   (ql:quickload :cl-fixtures)
 #+END_SRC
+
+This should work for all the supported lisp versions which are:
+- sbcl
+- ccl
+- abcl
+- ecl
 * Contributing
 Contributions are welcome. To do this simply start hacking away. Please write
 tests and documentation. To generate this README you should alter

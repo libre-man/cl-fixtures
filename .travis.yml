@@ -12,7 +12,7 @@ env:
     - LISP=ccl-bin
     - LISP=abcl
     - LISP=ecl
-    - LISP=clisp
+    #- LISP=clisp
 
 install:
   # Install Roswell
