@@ -4,6 +4,11 @@
 #+AUTHOR: Thomas Schaper
 #+TITLE: Lispy fixtures
 
+#+HTML: <p align="center">
+#+HTML: <a href='https://travis-ci.org/libre-man/cl-fixtures'><img src='https://travis-ci.org/libre-man/cl-fixtures.svg?branch=master' alt='Travis Status'/></a>
+#+HTML: <a href='https://coveralls.io/github/libre-man/cl-fixtures?branch=master'><img src='https://coveralls.io/repos/github/libre-man/cl-fixtures/badge.svg?branch=master' alt='Coverage Status'/></a>
+#+HTML: </p>
+
 Have you ever wanted to test a function with all possible combination of some
 arguments? Or have you even wanted to create fixtures that should be initialized
 with different values? ~cl-fixtures~ tries to enable you to do these things.
