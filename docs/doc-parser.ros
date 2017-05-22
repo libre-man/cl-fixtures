@@ -1,0 +1,74 @@
+#!/bin/sh
+#|-*- mode:lisp -*-|#
+#| <Put a one-line description here>
+exec ros -Q -- $0 "$@"
+|#
+(uiop:define-package #:cl-docstrings
+    (:use :cl))
+(in-package :cl-docstrings)
+
+(ql:quickload '(:cl-fixtures
+                :cl-fixtures-test
+                :djula
+                :cl-ppcre)
+              :silent t)
+
+(defun parse-code (documentation)
+  (with-input-from-string (input-stream documentation)
+    (labels ((aux (_)
+               (declare (ignore _))
+               (read input-stream nil input-stream)))
+      (let* ((sexpr (read input-stream))
+             (actual-values (or (multiple-value-list (eval sexpr)) '(nil)))
+             (_ (mapcar #'aux actual-values))
+             (eof-pos (file-position input-stream)))
+        (declare (ignore _))
+        (values (subseq documentation 0 eof-pos)
+                eof-pos)))))
+
+(defun docstring->markdown (package function)
+  (format *standard-output* "Writing ~A:~A~%" package function)
+  (with-output-to-string (stream)
+    (format stream "*~A*~%~%" function)
+    (let* ((*package* package)
+           (package-name (package-name package))
+           (re (cl-ppcre:parse-string (concatenate 'string "[ \t]*" package-name "> ")))
+           (newline (string #\Newline))
+           (documentation (find-if #'identity
+                                   (mapcar (lambda (doc-type)
+                                             (documentation function doc-type))
+                                           '(function type structure compiler-macro
+                                             setf method-combination variable)))))
+      (loop :for start = (cl-ppcre:scan re documentation)
+            :do (format stream "~A" (cl-ppcre:regex-replace-all
+                                     "\""
+                                     (subseq documentation 0 start)
+                                     "~"))
+            :while (numberp start)
+            :do (let ((start (+ (length package-name) 2 start)))
+                  (handler-case
+                      (multiple-value-bind (docstring eof)
+                          (parse-code (subseq documentation start))
+                        (format stream
+                                "#+BEGIN_SRC lisp~%~A> ~A~%#+END_SRC~%"
+                                package-name
+                                (string-right-trim newline docstring))
+                        (setf documentation (subseq documentation (+ start eof))))
+                    (end-of-file (_)
+                      (declare (ignore _))
+                      (format *error-output* "~%MALFORMED DOCSTRING: ~a~%" function))))))))
+
+(djula:def-tag-compiler :doc-of (package symbol)
+  (lambda (stream)
+    (declare (optimize (debug 3)))
+    (let ((pckg (find-package (if (stringp package)
+                                  (intern package)
+                                  package))))
+      (format stream "~A" (docstring->markdown pckg
+                                               (intern (format nil "~A" symbol) pckg))))))
+
+(defun main (in out)
+  (with-open-file (stream out :direction :output
+                              :if-exists :supersede
+                              :if-does-not-exist :create)
+    (format stream "~A" (djula:render-template* (djula:compile-template* (pathname in))))))

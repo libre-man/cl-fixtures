@@ -1,0 +1,34 @@
+language: common-lisp
+
+env:
+  global:
+    - PATH=~/.roswell/bin:~/nginx/sbin:$PATH
+    - LD_LIBRARY_PATH=$HOME/libuv/lib:$LD_LIBRARY_PATH
+    - ROSWELL_BRANCH=release
+    - ROSWELL_INSTALL_DIR=$HOME/.roswell
+    - COVERAGE_EXCLUDE=t
+  matrix:
+    - LISP=sbcl-bin COVERALLS=true
+    - LISP=ccl-bin
+    - LISP=abcl
+    - LISP=ecl
+    - LISP=clisp
+
+install:
+  # Install Roswell
+  - curl -L https://raw.githubusercontent.com/snmsts/roswell/$ROSWELL_BRANCH/scripts/install-for-ci.sh | sh
+  - ros asdf install
+  - ros -e '(ql:update-all-dists :prompt nil)'
+  - ros install prove
+
+cache:
+  directories:
+    - $HOME/.roswell
+    - $HOME/.config/common-lisp
+
+before_script:
+  - ros --version
+  - ros config
+
+script:
+  - run-prove cl-fixtures-test.asd

@@ -1,0 +1,112 @@
+# -*- mode: org; -*-
+#+SETUPFILE: /home/thomas/documents/org/theme-readtheorg.setup
+#+OPTIONS: timestamp:nil toc:t H:5
+#+AUTHOR: Thomas Schaper
+#+TITLE: Lispy fixtures
+
+Have you ever wanted to test a function with all possible combination of some
+arguments? Or have you even wanted to create fixtures that should be initialized
+with different values? ~cl-fixtures~ tries to enable you to do these things.
+
+* Usage
+The primary feature of ~cl-fixtures~ are its fixtures and parameters.
+** Fixtures
+Fixtures are objects that are used to test a piece of software. The simplest way
+to use a fixture would be doing a ~LET~ with a certain value. However after some
+time you might want to use a certain fixture in multiple places so you define a
+global variable. But the fixture might have some state and you need a fresh one
+for each test, how to do this?
+
+This is were cl-fixtures can help. Lets first define some fixtures.
+
+*** Defining fixtures
+The easiest way to define a fixture is with the ~DEFINE-SIMPLE-FIXTURE~ macro.
+
+However it might happen that a certain fixture can have multiple values, and
+each test should be ran with all options. In this case it is useful to use the
+~DEFINE-SEQUENCE-FIXTURE~ macro.
+
+All these macro's build on a 'master' macro: ~DEFINE-FIXTURE~ (surprise). With
+this macro you can create difficult fixtures that do setup and teardown between
+options instead of just before and after yielding values.
+
+{% doc-of cl-fixtures define-simple-fixture %}
+{% doc-of cl-fixtures define-sequence-fixture %}
+{% doc-of cl-fixtures define-fixture %}
+
+*** Using fixtures
+So now you have a few fixtures, but how to use them? The main way to use the
+fixtures is by using the ~WITH-FIXTURES~ macro. It takes a list of fixtures and
+a body and executes the body with all possible combinations of the given
+fixtures (it makes calculates the cartesian product).
+
+However this means that every fixture will get recalculated every time you use
+it. Lets say we have a fixture ~DATABASE~ that is used by the ~USERS~ fixture.
+We might a database and users in our body, but users should use the same
+database as the ~USERS~ fixture. This will *NOT* happen if you use the
+~WITH-FIXTURES~ macro, but fortunately there is the ~WITH-CACHED-FIXTURES~. If
+we use this fixture like ~(with-cached-fixture (database users) ...)~ we will
+have the desired behavior.
+
+{% doc-of cl-fixtures with-fixtures %}
+{% doc-of cl-fixtures with-cached-fixtures %}
+
+*** Removing fixtures
+You can also remove fixtures by using the ~UNDEFINE-FIXTURE~ macro. Please note
+that just uninterning the fixture name is not enough as the fixtures are saved
+in an internal hash-map.
+
+If you try to use a fixture that is not defined this will result in a
+~UNDEFINED-FIXTURE~ condition.
+
+{% doc-of cl-fixtures undefine-fixture %}
+{% doc-of cl-fixtures undefined-fixture %}
+
+** Parameterize
+'Parameterizing' is like creating anonymous fixtures. However these anonymous
+fixtures are somewhat more strict than actual fixtures as no inheritance is
+possible. The binding is very much like ~LET~ but instead of binding a single
+value all possible values are bound. Once again the Cartesian product of all
+options is calculated.
+
+Such a Cartesian product is not really traditional for parameterized tests. The
+more traditional behavior is to specify a sequence with different options for
+each element (this is the way pytest uses it). This behavior is also possible
+with the ~WITH-LOCKED-PARAMETERS~ macro, it is named this way as the options are
+fixed or locked.
+
+{% doc-of cl-fixtures with-parameters %}
+{% doc-of cl-fixtures with-locked-parameters %}
+* Efficiency
+Like any other library we have to talk a bit about efficiency. As this library
+focuses on being used in a unit-testing setup it is not optimized for speed.
+Quite a few intermediated anonymous functions are used, some of which could be
+optimized out. However this library tries to be fast and efficient enough to not
+break your test setup.
+
+A Cartesian product can become quite large quite quickly as the size is equal to
+~(reduce #'* (mapcar #'length sequences))~. Therefore this library does not try
+to first calculate it but it executes the values directly. This has the
+advantage of not blowing up your memory usage, however it will use some stack
+depth.
+
+Furthermore the user of this library must take caution when doing expensive
+calculations within the setup of the fixtures or within the body of a
+~WITH-FIXTURES~ (or alike) macro. This because of the just mentioned size.
+* Installation
+Installation is possible by simply loading ~CL-FIXTURES~
+from [Quicklisp](http://www.quicklisp.org/beta/).
+#+BEGIN_SRC lisp
+  (ql:quickload :cl-fixtures)
+#+END_SRC
+* Contributing
+Contributions are welcome. To do this simply start hacking away. Please write
+tests and documentation. To generate this README you should alter
+~docs/README.org~ and execute ~make docs~. To include docstrings in the README
+use the ~doc-of~ djula tag.
+* Author
+- Thomas Schaper (thomas@libremail.nl)
+* Copyright
+Copyright © 2017 Thomas Schaper (thomas@libremail.nl)
+* License
+Licensed under the MIT License.

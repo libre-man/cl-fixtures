@@ -1,0 +1,2 @@
+cl-fixtures.asd
+cl-fixtures-test.asd

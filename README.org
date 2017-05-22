@@ -1,0 +1,387 @@
+# -*- mode: org; -*-
+#+SETUPFILE: /home/thomas/documents/org/theme-readtheorg.setup
+#+OPTIONS: timestamp:nil toc:t H:5
+#+AUTHOR: Thomas Schaper
+#+TITLE: Lispy fixtures
+
+Have you ever wanted to test a function with all possible combination of some
+arguments? Or have you even wanted to create fixtures that should be initialized
+with different values? ~cl-fixtures~ tries to enable you to do these things.
+
+* Usage
+The primary feature of ~cl-fixtures~ are its fixtures and parameters.
+** Fixtures
+Fixtures are objects that are used to test a piece of software. The simplest way
+to use a fixture would be doing a ~LET~ with a certain value. However after some
+time you might want to use a certain fixture in multiple places so you define a
+global variable. But the fixture might have some state and you need a fresh one
+for each test, how to do this?
+
+This is were cl-fixtures can help. Lets first define some fixtures.
+
+*** Defining fixtures
+The easiest way to define a fixture is with the ~DEFINE-SIMPLE-FIXTURE~ macro.
+
+However it might happen that a certain fixture can have multiple values, and
+each test should be ran with all options. In this case it is useful to use the
+~DEFINE-SEQUENCE-FIXTURE~ macro.
+
+All these macro's build on a 'master' macro: ~DEFINE-FIXTURE~ (surprise). With
+this macro you can create difficult fixtures that do setup and teardown between
+options instead of just before and after yielding values.
+
+*DEFINE-SIMPLE-FIXTURE*
+
+Define a simple fixture that returns a single value.
+
+Define a new simple fixture with the name ~NAME~. This fixture will execute
+the ~BODY~ and ~CLEANUP~ as described in ~DEFINE-SEQUENCE-FIXTURE~.
+However this time the body does not have to return a sequence but any value.
+This value is used as the only value of the fixture.
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (list
+               (flet ((simple-func () :item))
+                      (define-simple-fixture simpl1 () nil (simple-func)))
+               (collecting (with-fixtures (simpl1) (collect simpl1))))
+ (SIMPL1 #(:item))
+#+END_SRC
+
+*DEFINE-SEQUENCE-FIXTURE*
+
+Define a sequence fixture that returns a sequence.
+
+Define a new sequence fixture with the name ~NAME~. This fixture will execute
+~BODY~ with the given fixtures ~FIXTURES~ (which should be a list in the
+format described in ~WITH-FIXTURES~) and it should return a sequence. Each
+element in this sequence is used as if it was yielded from the fixture. This
+means that if a sequence fixture that returns #(1 2) is used the fixture will
+have two values: 1 and 2.
+
+After the fixtures is used the function given in ~CLEANUP~ is called, if
+~CLEANUP~ is ~NIL~ it will be ignored. This function should take exactly one
+argument that is the result returned by the body. If there was a condition in
+the body the cleanup function is not called. The cleanup is always called if the
+body did return.
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (list
+               (define-sequence-fixture seq1 () nil (list 1 2 3))
+               (collecting (with-fixtures (seq1) (collect seq1))))
+ (SEQ1 #(1 2 3))
+#+END_SRC
+#+BEGIN_SRC lisp
+CL-FIXTURES> (let ((exec 0))
+               (define-sequence-fixture seq2 ((item seq1))
+                   (lambda (_) (declare (ignore _)) (incf exec))
+                 (list item 4 5))
+               (list (collecting (with-fixtures (seq2) (collect seq2)))
+                     exec))
+ (#(1 4 5 2 4 5 3 4 5) 3)
+#+END_SRC
+
+*DEFINE-FIXTURE*
+
+Define a new normal fixture.
+
+This is the basic function to define a new fixture named ~NAME~ with the given
+body ~BODY~. This fixture can use the given fixtures ~FIXTURES~ which should
+be a list in the same format as specified in the ~WITH-FIXTURES~ macro.
+
+Within the given body a variable is bound by the name given in ~MAPPER~. This
+is the continuation of the fixtures. So to yield a value one must call the
+function in this variable (by doing a funcall or something). This function
+accepts exactly one argument: the value that should be yielded.
+
+The return value of ~BODY~ is ignored.
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (define-fixture test-fixture cont () (funcall cont 5))
+ TEST-FIXTURE
+#+END_SRC
+#+BEGIN_SRC lisp
+CL-FIXTURES> (list (define-fixture test-fixture cont () (funcall cont 5))
+                   (define-fixture test-fixture cont () (funcall cont 6))
+                   (collecting (with-fixtures (test-fixture) (collect test-fixture))))
+ (TEST-FIXTURE TEST-FIXTURE #(6))
+#+END_SRC
+
+
+*** Using fixtures
+So now you have a few fixtures, but how to use them? The main way to use the
+fixtures is by using the ~WITH-FIXTURES~ macro. It takes a list of fixtures and
+a body and executes the body with all possible combinations of the given
+fixtures (it makes calculates the cartesian product).
+
+However this means that every fixture will get recalculated every time you use
+it. Lets say we have a fixture ~DATABASE~ that is used by the ~USERS~ fixture.
+We might a database and users in our body, but users should use the same
+database as the ~USERS~ fixture. This will *NOT* happen if you use the
+~WITH-FIXTURES~ macro, but fortunately there is the ~WITH-CACHED-FIXTURES~. If
+we use this fixture like ~(with-cached-fixture (database users) ...)~ we will
+have the desired behavior.
+
+*WITH-FIXTURES*
+
+Execute the given ~BODY~ with the given ~FIXTURES~ bound in a implicit
+progn.
+
+The ~FIXTURES~ variable should be a list where each item can be of the
+following forms:
+- A symbol designating a fixture. This means bind the result of the fixture to
+  the variable with the same name as the fixture.
+- A list with two elements like ~(BIND NAME)~ where ~BIND~ will be bound to
+  the result of the fixture designated by ~NAME~
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (progn (define-sequence-fixture simple () nil '(1 2))
+                    (equalp (collecting (with-fixtures (simple)
+                                          (collect simple)))
+                            (collecting (with-fixtures ((a simple))
+                                          (collect a)))))
+ T
+#+END_SRC
+
+Multiple fixtures can occur multiple times in the fixture list, and this behaves
+like one would suspect. However note that you have to alias at least one of them:
+#+BEGIN_SRC lisp
+CL-FIXTURES> (progn (define-sequence-fixture simple () nil '(1 2))
+                    (collecting (with-fixtures ((a simple) simple)
+                                  (collect a simple))))
+ #((1 1) (1 2) (2 1) (2 2))
+#+END_SRC
+
+This means that every fixture is evaluated every time it is being used. Take for
+example this example:
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (progn
+               (define-fixture rand mapper () (funcall mapper (random 10.0)))
+               (define-fixture rand2 mapper (rand) (funcall mapper rand))
+               (collecting (with-fixtures (rand rand2) (collect (= rand rand2)))))
+ #(NIL)
+#+END_SRC
+
+If this is not the behavior you want look at the ~WITH-CACHED-FIXTURES~ macro.
+
+The return value of the ~BODY~ is ignored.
+
+*WITH-CACHED-FIXTURES*
+
+Execute the given ~BODY~ with the given ~FIXTURES~ with the values of the
+fixtures cached.
+
+The structure of ~FIXTURES~ is the same as in the ~WITH-FIXTURES~ macro.
+However this macro does caching of the named fixtures in order. There are few
+things to consider:
+
+The first is that fixtures are evaluated, and therefore cached, in order. For
+example:
+#+BEGIN_SRC lisp
+CL-FIXTURES> (progn
+               (define-fixture first mapper () (funcall mapper (random 10.0)))
+               (define-fixture second mapper (first) (funcall mapper first))
+               (list (collecting (with-cached-fixtures (first second) (collect (= first second))))
+                     (collecting (with-cached-fixtures (second first) (collect (= first second))))
+                     (collecting (with-fixtures (second first) (collect (= first second))))))
+ (#(T) #(NIL) #(NIL))
+#+END_SRC
+
+In the first case the ~FIRST~ fixture is cached and replaced by the cached
+version when we are executing the ~SECOND~ fixture. However as the fixture
+list when defining the fixtures is a shorthand for ~WITH-FIXTURES~ it is not
+cached when we reverse the order, so it has the same result as if
+~WITH-FIXTURES~ was used. So if only executing the fixture once is important
+for more than just performance simply wrap all the code in
+~WITH-CACHED-FIXTURES~.
+
+The second thing to consider is the using the same fixture multiple times will
+NOT result a Cartesian product.
+#+BEGIN_SRC lisp
+CL-FIXTURES> (progn
+               (define-sequence-fixture test () nil '(1 2 3))
+               (list (collecting (with-cached-fixtures ((a test) (b test))
+                                   (collect a b)))
+                     (collecting (with-cached-fixtures ((a test))
+                                   (with-fixtures ((b test))
+                                     (collect a b))))))
+ (#((1 1) (2 2) (3 3)) #((1 1) (2 2) (3 3)))
+#+END_SRC
+
+
+*** Removing fixtures
+You can also remove fixtures by using the ~UNDEFINE-FIXTURE~ macro. Please note
+that just uninterning the fixture name is not enough as the fixtures are saved
+in an internal hash-map.
+
+If you try to use a fixture that is not defined this will result in a
+~UNDEFINED-FIXTURE~ condition.
+
+*UNDEFINE-FIXTURE*
+
+Undefine the given fixture ~NAME~.
+
+If you try to undefine a fixture while it is in use the resulting behavior will
+be unspecified.
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (list
+               (define-simple-fixture fixture () nil :item)
+               (collecting (with-fixtures (fixture) (collect fixture)))
+               (undefine-fixture fixture)
+               (incf-cl:signals-p undefined-fixture
+                 (collecting (with-fixtures (fixture) (collect fixture)))))
+ (fixture #(:item) fixture T)
+#+END_SRC
+
+*UNDEFINED-FIXTURE*
+
+This condition will be signaled if a fixture is used that is
+undefined. This will only happen if this fixture is used during runtime.
+
+** Parameterize
+'Parameterizing' is like creating anonymous fixtures. However these anonymous
+fixtures are somewhat more strict than actual fixtures as no inheritance is
+possible. The binding is very much like ~LET~ but instead of binding a single
+value all possible values are bound. Once again the Cartesian product of all
+options is calculated.
+
+Such a Cartesian product is not really traditional for parameterized tests. The
+more traditional behavior is to specify a sequence with different options for
+each element (this is the way pytest uses it). This behavior is also possible
+with the ~WITH-LOCKED-PARAMETERS~ macro, it is named this way as the options are
+fixed or locked.
+
+*WITH-PARAMETERS*
+
+Execute the given body ~BODY~ with the Cartesian product of the bindings.
+
+The ~BINDINGS~ is of the form ~(NAME VALUE)~ where ~NAME~ is the name of
+the variable that will be bound in the body. The ~VALUE~ will be evaluated and
+should return a function or sequence.
+
+If the value returns a function this function should take one argument which is
+the current continuation. This function should be called with the value that
+should be yielded. If the value returns a sequence this sequence will be mapped
+over, so ~NAME~ will be every item of this sequence.
+
+This macro is essentially a way to make anonymous fixtures.
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (collecting
+               (with-parameters ((a (list 1 2))
+                                 (b #(4 5 6))
+                                 (c (lambda (cont) (funcall cont :next)
+                                                   (funcall cont :item))))
+                 (collect a b c)))
+#((1 4 :next) (1 4 :item) (1 5 :next) (1 5 :item) (1 6 :next) (1 6 :item)
+  (2 4 :next) (2 4 :item) (2 5 :next) (2 5 :item) (2 6 :next) (2 6 :item))
+#+END_SRC
+
+If no parameters are specified ~BODY~ will run once. If parameters are
+specified but one of the sequences has a length of zero or the function does not
+call the continuation ~BODY~ will not be executed.
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (collecting (with-parameters () (collect :one)))
+ #(:one)
+#+END_SRC
+#+BEGIN_SRC lisp
+CL-FIXTURES> (collecting (with-parameters ((a nil)) (collect a)))
+ #()
+#+END_SRC
+#+BEGIN_SRC lisp
+CL-FIXTURES> (collecting (with-parameters ((a nil) (b '(1 2))) (collect a b)))
+ #()
+#+END_SRC
+
+The return value of ~BODY~ is ignored.
+#+BEGIN_SRC lisp
+CL-FIXTURES> (with-parameters () :value)
+ NIL
+#+END_SRC
+
+*WITH-LOCKED-PARAMETERS*
+
+Execute the given ~BODY~ with the given parameters named by ~NAMES~.
+
+The forms ~BODY~ will be executed with the variables in ~NAMES~ bound to the
+values in ~BINDINGS~. This ~BINDINGS~ form should be of the form
+~(combination-1 combination-2 ...)~. Each combination will be evaluated and
+should return a list of the length of the list specified in the ~NAMES~
+variable. The first variable in ~NAMES~ will be bound to the first value in
+the combination list, and the second value to the second item and so on.
+
+The return value of the ~BODY~ is not preserved.
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (collecting
+               (with-locked-parameters (a b)
+                   ('(1 2)
+                    (list 3 4))
+                 (collect a b)))
+ #((1 2) (3 4))
+#+END_SRC
+
+If no parameters are specified ~BODY~ will be executed once. If there are
+parameters specified but no bindings ~BODY~ will not be executed.
+#+BEGIN_SRC lisp
+CL-FIXTURES> (collecting (with-locked-parameters () () (collect :one)))
+ #(:one)
+#+END_SRC
+#+BEGIN_SRC lisp
+CL-FIXTURES> (collecting
+               (with-locked-parameters (a) ()
+                 (declare (ignore a))
+                 (collect :one)))
+ #()
+#+END_SRC
+
+Please note that the bindings and ~BODY~ are evaluated by turn. So first the
+first binding, the first time ~BODY~ the second biding, ~BODY~ for the
+second time and so on.
+
+#+BEGIN_SRC lisp
+CL-FIXTURES> (with-output-to-string (str)
+                 (with-locked-parameters (a) ((list (format str "Hello"))
+                                              (list (format str "Bye")))
+                   (declare (ignore a))
+                   (format str " Thomas.~%")))
+ "Hello Thomas.
+Bye Thomas.
+"
+#+END_SRC
+
+* Efficiency
+Like any other library we have to talk a bit about efficiency. As this library
+focuses on being used in a unit-testing setup it is not optimized for speed.
+Quite a few intermediated anonymous functions are used, some of which could be
+optimized out. However this library tries to be fast and efficient enough to not
+break your test setup.
+
+A Cartesian product can become quite large quite quickly as the size is equal to
+~(reduce #'* (mapcar #'length sequences))~. Therefore this library does not try
+to first calculate it but it executes the values directly. This has the
+advantage of not blowing up your memory usage, however it will use some stack
+depth.
+
+Furthermore the user of this library must take caution when doing expensive
+calculations within the setup of the fixtures or within the body of a
+~WITH-FIXTURES~ (or alike) macro. This because of the just mentioned size.
+* Installation
+Installation is possible by simply loading ~CL-FIXTURES~
+from [Quicklisp](http://www.quicklisp.org/beta/).
+#+BEGIN_SRC lisp
+  (ql:quickload :cl-fixtures)
+#+END_SRC
+* Contributing
+Contributions are welcome. To do this simply start hacking away. Please write
+tests and documentation. To generate this README you should alter
+~docs/README.org~ and execute ~make docs~. To include docstrings in the README
+use the ~doc-of~ djula tag.
+* Author
+- Thomas Schaper (thomas@libremail.nl)
+* Copyright
+Copyright © 2017 Thomas Schaper (thomas@libremail.nl)
+* License
+Licensed under the MIT License.
