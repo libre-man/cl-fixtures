@@ -9,7 +9,7 @@ A simple library to create and use parameterized fixtures
 Author: Thomas Schaper (thomas@libremail.nl)
 |#
 
-(defsystem "cl-fixtures"
+(asdf:defsystem "cl-fixtures"
   :version "0.1"
   :author "Thomas Schaper"
   :license "MIT"
@@ -22,7 +22,7 @@ Author: Thomas Schaper (thomas@libremail.nl)
   :description "A simple library to create and use parameterized fixtures"
   :long-description
   #.(with-open-file (stream (merge-pathnames
-                             #p"README.markdown"
+                             #p"README.org"
                              (or *load-pathname* *compile-file-pathname*))
                             :if-does-not-exist nil
                             :direction :input)

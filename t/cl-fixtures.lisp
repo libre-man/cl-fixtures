@@ -247,7 +247,10 @@
   (is-error (with-fixtures ((val existing-fixture))
               (declare (ignore val)))
             'undefined-fixture)
-  (is-error (with-fixtures ((totally wrong format)))
-            'error))
+  (is-error (macroexpand '(cl-fixtures::with-fixtures-base ((totally
+                                                             wrong
+                                                             format))
+                           nil))
+            'type-error))
 
 (finalize)

@@ -29,6 +29,12 @@ cache:
 before_script:
   - ros --version
   - ros config
+  - ros -e '(princ (lisp-implementation-type))
+            (terpri)
+            (princ (lisp-implementation-version))
+            (terpri)
+            (princ *features*)
+            (terpri)'
 
 script:
-  - run-prove cl-fixtures-test.asd
+  - "[[ $COVERALLS == true ]] && run-prove cl-fixtures-test.asd || ros -l cl-fixtures.asd -l cl-fixtures-test.asd -e '(ql:quickload :cl-fixtures-test) (ql:quickload :prove) (uiop:quit (if (prove:run-test-system :cl-fixtures-test) 0 1))'"

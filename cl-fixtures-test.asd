@@ -3,7 +3,7 @@ This file is a part of cl-fixtures project.
 Copyright (c) 2017 Thomas Schaper (thomas@libremail.nl)
 |#
 
-(defsystem "cl-fixtures-test"
+(asdf:defsystem "cl-fixtures-test"
   :author "Thomas Schaper"
   :license "MIT"
   :depends-on ("cl-fixtures"
@@ -21,4 +21,4 @@ Copyright (c) 2017 Thomas Schaper (thomas@libremail.nl)
   :description "Test system for cl-fixtures"
 
   :defsystem-depends-on ("prove-asdf")
-  :perform (test-op (o c) (symbol-call :prove-asdf :run-test-system c)))
+  :perform (asdf:test-op (o c) (symbol-call :prove-asdf :run-test-system c)))
