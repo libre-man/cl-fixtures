@@ -1,6 +1,5 @@
 (defpackage #:cl-fixtures
   (:use #:cl)
-  (:shadowing-import-from #:x.let-star #:let*)
   (:import-from #:alexandria
                 #:with-gensyms)
   (:export #:define-fixture
