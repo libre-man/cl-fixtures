@@ -136,24 +136,25 @@ If \"CACHEDP\" is not nil the used fixtures will be cached.
       (with-gensyms (found-func foundp body-func current-value replace-fixture)
         (let* (((current-bind current-name) (pop todo))
                (done (cons current-bind done)))
-          `(let* (((:mval ,found-func ,foundp) (gethash ',current-name ,hash-table))
-                  ,@(when cachedp `((,current-value nil))))
-             (unless ,foundp
-               (error 'undefined-fixture :name ',current-name))
-             (flet (,@(when cachedp
-                        `((,replace-fixture (mapper)
-                                            (funcall mapper ,current-value))))
-                    (,body-func (,current-bind)
-                      ,(when cachedp `(setf ,current-value ,current-bind))
-                      (with-fixtures-rec ,cachedp ,todo ,done ,hash-table ,func)))
-               ,@(when cachedp `((setf (gethash ',current-name ,hash-table)
-                                       #',replace-fixture)))
-               (unwind-protect
-                    (funcall ,found-func
-                             #',body-func)
-                 ,(when cachedp
-                    `(setf (gethash ',current-name ,hash-table)
-                           ,found-func)))))))
+          `(multiple-value-bind (,found-func ,foundp)
+               (gethash ',current-name ,hash-table)
+             (let* (,@(when cachedp `((,current-value nil))))
+               (unless ,foundp
+                 (error 'undefined-fixture :name ',current-name))
+               (flet (,@(when cachedp
+                          `((,replace-fixture (mapper)
+                                              (funcall mapper ,current-value))))
+                      (,body-func (,current-bind)
+                        ,(when cachedp `(setf ,current-value ,current-bind))
+                        (with-fixtures-rec ,cachedp ,todo ,done ,hash-table ,func)))
+                 ,@(when cachedp `((setf (gethash ',current-name ,hash-table)
+                                         #',replace-fixture)))
+                 (unwind-protect
+                      (funcall ,found-func
+                               #',body-func)
+                   ,(when cachedp
+                      `(setf (gethash ',current-name ,hash-table)
+                             ,found-func))))))))
       `(funcall ,func ,@(reverse done))))
 
 (defmacro define-fixture (name mapper fixtures &body body)

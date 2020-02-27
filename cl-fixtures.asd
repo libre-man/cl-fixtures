@@ -13,7 +13,7 @@ Author: Thomas Schaper (thomas@libremail.nl)
   :version "0.1"
   :author "Thomas Schaper"
   :license "MIT"
-  :depends-on ("x.let-star" "alexandria")
+  :depends-on ("alexandria")
   :components ((:module "src"
                 :components
                 ((:file "parametrize" :depends-on ("package" "cl-fixtures"))
