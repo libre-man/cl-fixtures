@@ -135,8 +135,8 @@ If \"CACHEDP\" is not nil the used fixtures will be cached.
   (if todo
       (with-gensyms (found-func foundp body-func current-value replace-fixture)
         (let* ((current-todo (pop todo))
-               (current-bind (nth 1 current-todo))
-               (current-name (nth 2 current-todo))
+               (current-bind (nth 0 current-todo))
+               (current-name (nth 1 current-todo))
                (done (cons current-bind done)))
           `(multiple-value-bind (,found-func ,foundp)
                (gethash ',current-name ,hash-table)
